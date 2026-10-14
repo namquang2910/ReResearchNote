@@ -1,0 +1,67 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: research
+          POSTGRES_PASSWORD: research
+          POSTGRES_DB: research_notes
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U research" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://research:research@localhost:5432/research_notes?schema=public
+      JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      AI_PROVIDER: none
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: api/package-lock.json }
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npx prisma migrate deploy
+      - run: npm run build
+      - name: E2E (đăng nhập, cô lập dữ liệu, rate limit…)
+        run: |
+          PORT=4001 node dist/main > /tmp/api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:4001/api/health && break; sleep 1; done
+          BASE=http://localhost:4001 node test/e2e.js
+      - name: AI (Anthropic giả lập + hạn mức)
+        run: |
+          PORT=4002 AI_PROVIDER=anthropic ANTHROPIC_API_KEY=test ANTHROPIC_BASE_URL=http://localhost:4900 AI_DAILY_LIMIT=2 node dist/main > /tmp/api2.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:4002/api/health && break; sleep 1; done
+          BASE=http://localhost:4002 node test/ai.js
+      - if: failure()
+        run: tail -n 80 /tmp/api.log /tmp/api2.log || true
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t research-api ./api
+      - run: docker build -t research-web ./web

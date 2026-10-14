@@ -1,0 +1,191 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String   @default("")
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+  projects     Project[]
+  statuses     Status[]
+  feeds        CalendarFeed[]
+  aiUsage      AiUsage[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title       String
+  description String   @default("")
+  favorite    Boolean  @default(false)
+  color       String   @default("#6366f1")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  metrics     Metric[]
+  labels      Label[]
+  tasks       Task[]
+  feeds       CalendarFeed[]
+
+  @@index([ownerId])
+}
+
+model Metric {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  unit      String      @default("")
+  better    String      @default("high") // high | low
+  order     Int         @default(0)
+  logs      MetricLog[]
+
+  @@index([projectId])
+}
+
+model Label {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  color     String  @default("#6366f1")
+  tasks     Task[]
+
+  @@index([projectId])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String       @default("")
+  status      String       @default("todo")
+  dueDate     DateTime?
+  /// thời điểm chuyển sang trạng thái loại "done" (null nếu chưa xong) — dùng cho thống kê Profile
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  labels      Label[]
+  dependsOn   Task[]       @relation("TaskDeps")
+  dependents  Task[]       @relation("TaskDeps")
+  logs        MetricLog[]
+  changes     Change[]
+  commits     Commit[]
+  comments    Comment[]
+  notes       Note[]
+
+  @@index([projectId])
+  @@index([projectId, status])
+  @@index([dueDate])
+  @@index([completedAt])
+}
+
+model MetricLog {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  metricId  String
+  metric    Metric   @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  step      Float
+  value     Float
+  /// độ lệch chuẩn (nếu có), hiển thị value ± std
+  std       Float?
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([metricId])
+  @@index([taskId, metricId])
+}
+
+model Change {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Commit {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  hash      String
+  message   String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title     String   @default("")
+  body      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+/// Trạng thái tùy chỉnh của từng người dùng. `key` là giá trị lưu ở Task.status; `kind`: todo | running | blocked | done.
+model Status {
+  id      String @id @default(cuid())
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  key     String
+  name    String
+  color   String @default("#94a3b8")
+  kind    String @default("todo")
+  order   Int    @default(0)
+
+  @@unique([ownerId, key])
+  @@index([ownerId])
+}
+
+/// Link lịch đăng ký (iCalendar). projectId null = mọi dự án của chủ sở hữu.
+model CalendarFeed {
+  id          String   @id @default(cuid())
+  token       String   @unique
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  includeDone Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+/// Đếm số lượt dùng AI mỗi người mỗi ngày (để áp hạn mức).
+model AiUsage {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day    String
+  count  Int    @default(0)
+
+  @@unique([userId, day])
+}

@@ -1,0 +1,15 @@
+# Chỉ Postgres cho phát triển cục bộ (cổng 5433, khớp api/.env):
+#   docker compose -f docker-compose.dev.yml up -d
+#   cd api && npx prisma migrate deploy && npm run dev
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: research
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: research_notes
+    ports: ["5433:5432"]
+    volumes: [pgdata_dev:/var/lib/postgresql/data]
+volumes:
+  pgdata_dev:

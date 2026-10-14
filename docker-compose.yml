@@ -1,0 +1,83 @@
+# Production: web + API + Postgres + Caddy (HTTPS tự động) + backup hằng ngày.
+#   cp .env.example .env   # điền DOMAIN, POSTGRES_PASSWORD, JWT_SECRET…
+#   docker compose up -d --build
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?đặt POSTGRES_PASSWORD trong .env}
+      POSTGRES_DB: research_notes
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research -d research_notes"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: postgresql://research:${POSTGRES_PASSWORD}@db:5432/research_notes?schema=public&connection_limit=10
+      JWT_SECRET: ${JWT_SECRET:?đặt JWT_SECRET trong .env (openssl rand -hex 32)}
+      PUBLIC_URL: https://${DOMAIN:?đặt DOMAIN trong .env}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      AI_DAILY_LIMIT: ${AI_DAILY_LIMIT:-20}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+    expose: ["4000"]
+
+  web:
+    build:
+      context: ./web
+      args:
+        API_ORIGIN: http://api:4000
+    restart: unless-stopped
+    depends_on: [api]
+    expose: ["3000"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [web, api]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # pg_dump hằng ngày vào ./backups (giữ 7 ngày, 4 tuần, 6 tháng). Xem DEPLOY.md để đẩy lên kho lưu trữ ngoài.
+  backup:
+    image: prodrigestivill/postgres-backup-local:17
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: research_notes
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+    volumes:
+      - ./backups:/backups
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
