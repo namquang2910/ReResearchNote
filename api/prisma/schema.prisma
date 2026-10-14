@@ -14,6 +14,18 @@ model User {
   name         String   @default("")
   createdAt    DateTime @default(now())
   lastLoginAt  DateTime?
+  /// false khi tài khoản tạo qua Google và chưa đặt mật khẩu
+  passwordSet  Boolean  @default(true)
+  emailVerifiedAt DateTime?
+  googleId     String?  @unique
+  /// phiên (JWT) cấp trước thời điểm này không còn hợp lệ — dùng khi đổi/đặt lại mật khẩu
+  sessionsValidAfter DateTime?
+  totpEnabled  Boolean  @default(false)
+  /// bí mật TOTP đã mã hóa AES-256-GCM (base64)
+  totpSecretEnc String?
+  /// SHA-256 của các mã khôi phục chưa dùng (JSON mảng)
+  recoveryCodes Json?
+  authTokens   AuthToken[]
   projects     Project[]
   statuses     Status[]
   feeds        CalendarFeed[]
@@ -188,4 +200,18 @@ model AiUsage {
   count  Int    @default(0)
 
   @@unique([userId, day])
+}
+
+/// Token dùng một lần cho xác minh email / đặt lại mật khẩu (chỉ lưu băm SHA-256).
+model AuthToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    // verify | reset
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, type])
 }

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { AccessService } from '../common/access.service';
 import { PrismaService } from '../prisma/prisma.module';
 import { StatusesService } from '../statuses/statuses.service';
+import { summarizedLogs } from '../common/logs';
 import * as D from './dto';
 
 /** Các tài nguyên con của task và trường cho phép ghi. */
@@ -109,15 +110,28 @@ export class TasksService {
         labels: { select: { id: true } },
         dependsOn: { select: { id: true, title: true, status: true } },
         dependents: { select: { id: true, title: true, status: true } },
-        logs: { orderBy: { step: 'asc' } },
-        changes: { orderBy: { createdAt: 'desc' } },
-        commits: { orderBy: { createdAt: 'desc' } },
-        comments: { orderBy: { createdAt: 'desc' } },
-        notes: { orderBy: { updatedAt: 'desc' } },
+        changes: { orderBy: { createdAt: 'desc' }, take: 200 },
+        commits: { orderBy: { createdAt: 'desc' }, take: 200 },
+        comments: { orderBy: { createdAt: 'desc' }, take: 200 },
+        notes: { orderBy: { updatedAt: 'desc' }, take: 200 },
       },
     });
+    // log: tóm tắt cho biểu đồ (≤ ~150 điểm/metric); toàn bộ bản ghi lấy qua GET /tasks/:id/logs (phân trang)
+    const { logs, counts } = await summarizedLogs(this.prisma, { userId, taskId: id, max: 150 });
     const { labels, ...rest } = t;
-    return { ...rest, labelIds: labels.map((l) => l.id) };
+    return { ...rest, logs: logs.get(id) ?? [], logCounts: counts.get(id) ?? {}, labelIds: labels.map((l) => l.id) };
+  }
+
+  /** Bản ghi log đầy đủ của một task, phân trang theo offset (step tăng dần). */
+  async logsPage(userId: string, taskId: string, metricId?: string, offset = 0, limit = 50) {
+    await this.access.task(userId, taskId);
+    const where = { taskId, ...(metricId ? { metricId } : {}) };
+    const take = Math.min(Math.max(limit, 1), 200);
+    const [items, total] = await Promise.all([
+      this.prisma.metricLog.findMany({ where, orderBy: [{ step: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }], skip: Math.max(offset, 0), take }),
+      this.prisma.metricLog.count({ where }),
+    ]);
+    return { items, total, nextOffset: offset + items.length < total ? offset + items.length : null };
   }
 
   async update(userId: string, id: string, dto: D.UpdateTaskDto) {

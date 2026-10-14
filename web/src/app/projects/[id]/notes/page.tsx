@@ -5,11 +5,12 @@ import { Search, StickyNote } from 'lucide-react';
 import { useProjectCtx, useProjectNotes } from '@/lib/hooks';
 import { useStatuses } from '@/lib/statuses';
 import { ago } from '@/lib/utils';
-import { Empty, Spinner, inputCls } from '@/components/ui';
+import { Button, Empty, Spinner, inputCls } from '@/components/ui';
 
 export default function NotesPage() {
   const { project, openTask } = useProjectCtx();
-  const { data: notes, isLoading } = useProjectNotes(project.id);
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useProjectNotes(project.id);
+  const notes = data?.pages.flatMap((p) => p.items) ?? [];
   const [q, setQ] = useState('');
   const st = useStatuses();
   const list = (notes ?? []).filter((n) => !q.trim() || (n.title + n.body + n.task.title).toLowerCase().includes(q.trim().toLowerCase()));
@@ -36,6 +37,11 @@ export default function NotesPage() {
               <p className="mt-1 line-clamp-5 whitespace-pre-wrap text-sm text-muted-fg">{n.body || '—'}</p>
             </button>
           ))}
+        </div>
+      )}
+      {hasNextPage && (
+        <div className="mt-6 flex justify-center">
+          <Button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>{isFetchingNextPage ? t('Đang tải…') : t('Tải thêm')}</Button>
         </div>
       )}
     </div>

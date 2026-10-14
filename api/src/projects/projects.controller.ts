@@ -11,7 +11,7 @@ export class ProjectsController {
   @Post('projects') create(@CurrentUser() u: AuthUser, @Body() dto: D.CreateProjectDto) { return this.s.create(u.id, dto); }
   @Post('projects/sample') sample(@CurrentUser() u: AuthUser, @Query('lang') lang?: string) { return this.s.sample(u.id, lang === 'en' ? 'en' : 'vi'); }
   @Get('projects/:id') overview(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.s.overview(u.id, id); }
-  @Get('projects/:id/notes') notes(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.s.notes(u.id, id); }
+  @Get('projects/:id/notes') notes(@CurrentUser() u: AuthUser, @Param('id') id: string, @Query('cursor') cursor?: string, @Query('limit') limit?: string) { return this.s.notes(u.id, id, cursor, limit ? parseInt(limit, 10) : undefined); }
   @Patch('projects/:id') update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: D.UpdateProjectDto) { return this.s.update(u.id, id, dto); }
   @Delete('projects/:id') remove(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.s.remove(u.id, id); }
 

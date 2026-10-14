@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { AuthUser, CurrentUser } from '../common/auth';
 import { TasksService } from './tasks.service';
 import * as D from './dto';
@@ -11,6 +11,10 @@ export class TasksController {
   bulk(@CurrentUser() u: AuthUser, @Param('projectId') pid: string, @Body() dto: D.BulkTasksDto) { return this.s.bulkCreate(u.id, pid, dto); }
   @Post('projects/:projectId/tasks')
   create(@CurrentUser() u: AuthUser, @Param('projectId') pid: string, @Body() dto: D.CreateTaskDto) { return this.s.create(u.id, pid, dto); }
+  @Get('tasks/:id/logs')
+  logs(@CurrentUser() u: AuthUser, @Param('id') id: string, @Query('metricId') metricId?: string, @Query('offset') offset?: string, @Query('limit') limit?: string) {
+    return this.s.logsPage(u.id, id, metricId || undefined, parseInt(offset ?? '0', 10) || 0, parseInt(limit ?? '50', 10) || 50);
+  }
   @Get('tasks/:id') detail(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.s.detail(u.id, id); }
   @Patch('tasks/:id') update(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() dto: D.UpdateTaskDto) { return this.s.update(u.id, id, dto); }
   @Delete('tasks/:id') remove(@CurrentUser() u: AuthUser, @Param('id') id: string) { return this.s.remove(u.id, id); }

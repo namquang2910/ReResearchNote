@@ -7,6 +7,7 @@ import { CalendarModule } from './calendar/calendar.module';
 import { AccessModule } from './common/access.service';
 import { AuthGuard, Public } from './common/auth';
 import { LibraryModule } from './library/library.module';
+import { MailModule } from './mail/mail.module';
 import { OverviewController } from './overview/overview.controller';
 import { PrismaModule, PrismaService } from './prisma/prisma.module';
 import { ProfileModule } from './profile/profile.module';
@@ -28,8 +29,9 @@ export class HealthController {
 @Module({
   imports: [
     // mặc định 300 request/phút/IP; các endpoint nhạy cảm có giới hạn riêng bằng @Throttle
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
-    PrismaModule, AccessModule, AuthModule, StatusesModule, LibraryModule,
+    // THROTTLE_DISABLED chỉ dùng cho bộ test (nhiều request liên tiếp); không đặt ở production
+    ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 300 }], skipIf: () => process.env.THROTTLE_DISABLED === 'true' }),
+    PrismaModule, AccessModule, MailModule, AuthModule, StatusesModule, LibraryModule,
     ProjectsModule, TasksModule, AiModule, CalendarModule, ProfileModule,
   ],
   controllers: [OverviewController, HealthController],

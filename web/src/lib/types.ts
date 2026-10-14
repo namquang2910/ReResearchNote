@@ -10,6 +10,8 @@ export interface TaskLite {
   id: string; projectId: string; title: string; description: string; status: Status; createdAt: string;
   dueDate: string | null;
   labelIds: string[]; dependsOnIds: string[]; logs: Log[];
+  /** tổng số log THẬT theo metric (logs ở trên đã được tóm tắt) */
+  logCounts: Record<string, number>;
   counts: { changes: number; commits: number; comments: number; notes: number };
 }
 export interface Project {
@@ -26,6 +28,7 @@ export interface TaskDetail {
   dueDate: string | null;
   labelIds: string[]; dependsOn: TaskRef[]; dependents: TaskRef[];
   logs: Log[];
+  logCounts: Record<string, number>;
   changes: { id: string; text: string; createdAt: string }[];
   commits: { id: string; hash: string; message: string; createdAt: string }[];
   comments: { id: string; text: string; createdAt: string }[];
@@ -39,7 +42,7 @@ export interface ExpTask {
   id: string; projectId: string; title: string; description: string; status: Status;
   dueDate: string | null; createdAt: string; updatedAt: string;
   labels: { id: string; name: string; color: string }[];
-  dependsOnIds: string[]; logs: Log[];
+  dependsOnIds: string[]; logs: Log[]; logCounts: Record<string, number>;
   project: ProjectRef & { metrics: Metric[] };
 }
 export interface GlobalNote { id: string; title: string; body: string; updatedAt: string; task: TaskRef & { project: ProjectRef } }
@@ -74,3 +77,6 @@ export interface ProfileStats {
   byWeekday: number[];
   projects: ProfileProject[];
 }
+
+export interface Page<T> { items: T[]; nextCursor: string | null }
+export interface LogPage { items: Log[]; total: number; nextOffset: number | null }

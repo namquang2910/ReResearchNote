@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { Search, StickyNote } from 'lucide-react';
 import { useAllNotes } from '@/lib/hooks';
 import { ago, taskHref } from '@/lib/utils';
-import { Empty, Spinner, inputCls } from '@/components/ui';
+import { Button, Empty, Spinner, inputCls } from '@/components/ui';
 
 export default function NotesPage() {
   const router = useRouter();
-  const { data, isLoading } = useAllNotes();
+  const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useAllNotes();
   const [q, setQ] = useState('');
-  const list = (data ?? []).filter((n) => !q.trim() || (n.title + n.body + n.task.title + n.task.project.title).toLowerCase().includes(q.trim().toLowerCase()));
+  const all = data?.pages.flatMap((p) => p.items) ?? [];
+  const list = all.filter((n) => !q.trim() || (n.title + n.body + n.task.title + n.task.project.title).toLowerCase().includes(q.trim().toLowerCase()));
 
   return (
     <div className="flex-1 overflow-auto">
@@ -40,6 +41,11 @@ export default function NotesPage() {
                 <p className="mt-1 line-clamp-5 whitespace-pre-wrap text-sm text-muted-fg">{n.body || '—'}</p>
               </button>
             ))}
+          </div>
+        )}
+        {hasNextPage && (
+          <div className="mt-6 flex justify-center">
+            <Button onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>{isFetchingNextPage ? t('Đang tải…') : t('Tải thêm')}</Button>
           </div>
         )}
       </div>

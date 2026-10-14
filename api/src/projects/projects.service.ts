@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AccessService } from '../common/access.service';
 import { PrismaService } from '../prisma/prisma.module';
 import { StatusesService } from '../statuses/statuses.service';
+import { makeCursor, parseCursor, summarizedLogs } from '../common/logs';
 import * as D from './dto';
 
 const LOWER_BETTER = /loss|error|time|mse|mae|cost|latency|perplexity/i;
@@ -58,17 +59,20 @@ export class ProjectsService {
           include: {
             labels: { select: { id: true } },
             dependsOn: { select: { id: true } },
-            logs: { orderBy: { step: 'asc' } },
             _count: { select: { changes: true, commits: true, comments: true, notes: true } },
           },
         },
       },
     });
     const { ownerId: _o, ...rest } = p;
+    // log đã được tóm tắt (đầu/cuối/tốt nhất + lấy mẫu); logCounts là số log thật
+    const { logs, counts } = await summarizedLogs(this.prisma, { userId, projectId: id, max: 40 });
     return {
       ...rest,
       tasks: p.tasks.map(({ labels, dependsOn, _count, ...t }) => ({
         ...t,
+        logs: logs.get(t.id) ?? [],
+        logCounts: counts.get(t.id) ?? {},
         labelIds: labels.map((l) => l.id),
         dependsOnIds: dependsOn.map((d) => d.id),
         counts: _count,
@@ -76,14 +80,23 @@ export class ProjectsService {
     };
   }
 
-  /** Mọi note của dự án, kèm task chứa nó. */
-  async notes(userId: string, projectId: string) {
+  /** Note của dự án (phân trang keyset), kèm task chứa nó. */
+  async notes(userId: string, projectId: string, cursor?: string, limit = 60) {
     await this.access.project(userId, projectId);
-    return this.prisma.note.findMany({
-      where: { task: { projectId } },
-      orderBy: { updatedAt: 'desc' },
+    const c = parseCursor(cursor);
+    const take = Math.min(Math.max(limit, 1), 200);
+    const rows = await this.prisma.note.findMany({
+      where: {
+        task: { projectId },
+        ...(c ? { OR: [{ updatedAt: { lt: c.updatedAt } }, { updatedAt: c.updatedAt, id: { lt: c.id } }] } : {}),
+      },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
       include: { task: { select: { id: true, title: true, status: true } } },
     });
+    const more = rows.length > take;
+    const items = more ? rows.slice(0, take) : rows;
+    return { items, nextCursor: more ? makeCursor(items[items.length - 1]) : null };
   }
 
   async update(userId: string, id: string, dto: D.UpdateProjectDto) {

@@ -1,10 +1,10 @@
 'use client';
 import { t } from './i18n';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 import { getLang } from './i18n';
-import type { ExpTask, GlobalNote, LibraryItem, ProfileStats, Project, ProjectNote, ProjectSummary, SearchResult, Status, TaskDetail } from './types';
+import type { ExpTask, GlobalNote, LibraryItem, Page, ProfileStats, Project, ProjectNote, ProjectSummary, SearchResult, Status, TaskDetail } from './types';
 
 /* ---------- toast ---------- */
 const ToastCtx = createContext<(msg: string, kind?: 'error' | 'ok') => void>(() => {});
@@ -37,14 +37,25 @@ export const useProject = (id: string) => useQuery({ queryKey: ['project', id], 
 export const useTask = (id: string | null) =>
   useQuery({ queryKey: ['task', id], queryFn: () => api.get<TaskDetail>(`/tasks/${id}`), enabled: !!id });
 export const useExperiments = () => useQuery({ queryKey: ['experiments'], queryFn: () => api.get<ExpTask[]>('/experiments') });
-export const useAllNotes = () => useQuery({ queryKey: ['allNotes'], queryFn: () => api.get<GlobalNote[]>('/notes') });
+export const useAllNotes = () =>
+  useInfiniteQuery({
+    queryKey: ['allNotes'],
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => api.get<Page<GlobalNote>>(`/notes?limit=60${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
 export const useSearch = (q: string) =>
   useQuery({ queryKey: ['search', q], queryFn: () => api.get<SearchResult>(`/search?q=${encodeURIComponent(q)}`), enabled: q.trim().length > 0 });
 export const useProfileStats = (projectId = '') =>
   useQuery({ queryKey: ['profile', projectId], queryFn: () => api.get<ProfileStats>(`/profile/stats${projectId ? `?projectId=${projectId}` : ''}`) });
 export const useLibrary = () => useQuery({ queryKey: ['library'], queryFn: () => api.get<LibraryItem[]>('/library') });
 export const useProjectNotes = (id: string) =>
-  useQuery({ queryKey: ['notes', id], queryFn: () => api.get<ProjectNote[]>(`/projects/${id}/notes`) });
+  useInfiniteQuery({
+    queryKey: ['notes', id],
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => api.get<Page<ProjectNote>>(`/projects/${id}/notes?limit=60${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
 
 /* ---------- actions ---------- */
 export function useActions(projectId?: string) {

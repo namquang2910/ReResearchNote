@@ -3,6 +3,9 @@ import { t } from '@/lib/i18n';
 import { useEffect, useState, type ReactNode } from 'react';
 import { CartesianGrid, ErrorBar, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { GitCommit, MessageSquare, Plus, StickyNote, Trash2, X, FileDiff, Activity, FileText } from 'lucide-react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import type { LogPage } from '@/lib/types';
 import { useLibrary, useProjectCtx, useTask } from '@/lib/hooks';
 import type { TaskDetail } from '@/lib/types';
 import { useStatuses } from '@/lib/statuses';
@@ -28,7 +31,7 @@ export default function TaskDrawer() {
   if (!taskId) return null;
   const tabs: { id: Tab; label: string; icon: ReactNode; n?: number }[] = [
     { id: 'detail', label: t("Chi tiết"), icon: <FileText size={15} /> },
-    { id: 'metrics', label: 'Metrics', icon: <Activity size={15} />, n: task?.logs.length },
+    { id: 'metrics', label: 'Metrics', icon: <Activity size={15} />, n: task ? Object.values(task.logCounts ?? {}).reduce((a, b) => a + b, 0) : undefined },
     { id: 'changes', label: 'Changes', icon: <FileDiff size={15} />, n: task?.changes.length },
     { id: 'commits', label: 'Commits', icon: <GitCommit size={15} />, n: task?.commits.length },
     { id: 'notes', label: 'Notes', icon: <StickyNote size={15} />, n: task?.notes.length },
@@ -252,26 +255,51 @@ function MetricsTab({ task }: { task: TaskDetail }) {
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <details className="mt-2">
-              <summary className="cursor-pointer text-xs text-muted-fg">{t('{n} bản ghi', { n: logs.length })}</summary>
-              <table className="mt-2 w-full text-sm">
-                <tbody>
-                  {logs.map((l) => (
-                    <tr key={l.id} className="border-t">
-                      <td className="py-1.5 text-muted-fg">step {num(l.step)}</td>
-                      <td className="py-1.5 font-medium tabular-nums">{num(l.value)}{l.std != null && <span className="font-normal text-muted-fg"> ± {num(l.std)}</span>}</td>
-                      <td className="py-1.5 text-xs text-muted-fg">{ago(l.createdAt)}</td>
-                      <td className="py-1.5 text-right"><IconDelete onClick={() => actions.removeItem('logs', l.id)} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </details>
+            <LogRecords taskId={task.id} metricId={m.id} total={task.logCounts[m.id] ?? logs.length} />
           </div>
         );
       })}
       {task.logs.length === 0 && <Empty icon={<Activity size={22} />} title={t("Chưa có log nào")} hint={t("Ghi giá trị metric đầu tiên ở trên. Task sẽ tự chuyển sang “Đang chạy”.")} />}
     </div>
+  );
+}
+
+/** Bảng bản ghi đầy đủ của một metric — chỉ tải khi mở, phân trang 50 dòng/lần. */
+function LogRecords({ taskId, metricId, total }: { taskId: string; metricId: string; total: number }) {
+  const { actions } = useProjectCtx();
+  const [open, setOpen] = useState(false);
+  const q = useInfiniteQuery({
+    queryKey: ['logs', taskId, metricId],
+    enabled: open,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.get<LogPage>(`/tasks/${taskId}/logs?metricId=${metricId}&limit=50&offset=${pageParam}`),
+    getNextPageParam: (last) => last.nextOffset ?? undefined,
+  });
+  const rows = q.data?.pages.flatMap((p) => p.items) ?? [];
+  return (
+    <details className="mt-2" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-xs text-muted-fg">{t('{n} bản ghi', { n: total })}</summary>
+      {q.isLoading && <div className="flex justify-center py-3"><Spinner /></div>}
+      <table className="mt-2 w-full text-sm">
+        <tbody>
+          {rows.map((l) => (
+            <tr key={l.id} className="border-t">
+              <td className="py-1.5 text-muted-fg">step {num(l.step)}</td>
+              <td className="py-1.5 font-medium tabular-nums">{num(l.value)}{l.std != null && <span className="font-normal text-muted-fg"> ± {num(l.std)}</span>}</td>
+              <td className="py-1.5 text-xs text-muted-fg">{ago(l.createdAt)}</td>
+              <td className="py-1.5 text-right"><IconDelete onClick={() => actions.removeItem('logs', l.id)} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {q.hasNextPage && (
+        <div className="mt-2 flex justify-center">
+          <Button size="sm" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}>
+            {q.isFetchingNextPage ? t('Đang tải…') : t('Tải thêm ({n} còn lại)', { n: total - rows.length })}
+          </Button>
+        </div>
+      )}
+    </details>
   );
 }
 

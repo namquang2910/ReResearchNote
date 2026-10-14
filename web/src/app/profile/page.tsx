@@ -6,6 +6,7 @@ import { useProfileStats, useProjects } from '@/lib/hooks';
 import { dateLocale, t } from '@/lib/i18n';
 import { usePrefs } from '@/lib/prefs';
 import { useAuth } from '@/lib/auth';
+import SecurityCard from '@/components/SecurityCard';
 import { api } from '@/lib/api';
 import { useToast } from '@/lib/hooks';
 import { useRouter } from 'next/navigation';
@@ -198,39 +199,27 @@ export default function ProfilePage() {
           )}
         </Card>
 
-        {/* Tài khoản */}
-        <Card title={t('Tài khoản')}>
-          <div className="grid gap-6 md:grid-cols-2">
+        <SecurityCard />
+
+        {/* Dữ liệu & tài khoản */}
+        <Card title={t('Dữ liệu và tài khoản')}>
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="mb-2 text-sm font-medium">{t('Đổi mật khẩu')}</div>
-              <div className="space-y-2">
-                <input type="password" autoComplete="current-password" placeholder={t('Mật khẩu hiện tại')} className={inputCls} value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
-                <input type="password" autoComplete="new-password" placeholder={t('Mật khẩu mới (tối thiểu 8 ký tự)')} className={inputCls} value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
-                <Button disabled={busy || !pw.current || pw.next.length < 8} onClick={async () => {
-                  setBusy(true);
-                  try { await api.post('/auth/password', pw); setPw({ current: '', next: '' }); toast(t('Đã đổi mật khẩu')); }
-                  catch (e: any) { toast(e.message, 'error'); } finally { setBusy(false); }
-                }}>{t('Đổi mật khẩu')}</Button>
-              </div>
+              <div className="mb-1 text-sm font-medium">{t('Dữ liệu của bạn')}</div>
+              <p className="text-xs text-muted-fg">{t('Tải toàn bộ dự án, task, log, note của bạn dưới dạng JSON.')}</p>
             </div>
-            <div className="space-y-3">
-              <div>
-                <div className="mb-1 text-sm font-medium">{t('Dữ liệu của bạn')}</div>
-                <p className="mb-2 text-xs text-muted-fg">{t('Tải toàn bộ dự án, task, log, note của bạn dưới dạng JSON.')}</p>
-                <Button onClick={async () => {
-                  try {
-                    const data = await api.get('/auth/export');
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-                    a.download = `research-notes-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-                  } catch (e: any) { toast(e.message, 'error'); }
-                }}>{t('Xuất dữ liệu (JSON)')}</Button>
-              </div>
-              <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button onClick={async () => { await logout(); router.replace('/login'); }}>{t('Đăng xuất')}</Button>
-                <Button variant="danger" onClick={() => setDelOpen(true)}>{t('Xóa tài khoản')}</Button>
-              </div>
-            </div>
+            <Button onClick={async () => {
+              try {
+                const data = await api.get('/auth/export');
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+                a.download = `research-notes-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+              } catch (e: any) { toast(e.message, 'error'); }
+            }}>{t('Xuất dữ liệu (JSON)')}</Button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 border-t pt-4">
+            <Button onClick={async () => { await logout(); router.replace('/login'); }}>{t('Đăng xuất')}</Button>
+            <Button variant="danger" onClick={() => setDelOpen(true)}>{t('Xóa tài khoản')}</Button>
           </div>
         </Card>
       </div>
@@ -238,12 +227,12 @@ export default function ProfilePage() {
       <Modal open={delOpen} onClose={() => setDelOpen(false)} title={t('Xóa tài khoản')}>
         <div className="space-y-3">
           <p className="text-sm text-muted-fg">{t('Toàn bộ dự án, task, log và note của bạn sẽ bị xóa vĩnh viễn. Không thể hoàn tác.')}</p>
-          <input type="password" autoFocus placeholder={t('Nhập mật khẩu để xác nhận')} className={inputCls} value={delPw} onChange={(e) => setDelPw(e.target.value)} />
+          <input type={user?.hasPassword ? 'password' : 'email'} autoFocus placeholder={user?.hasPassword ? t('Nhập mật khẩu để xác nhận') : t('Nhập email của bạn để xác nhận')} className={inputCls} value={delPw} onChange={(e) => setDelPw(e.target.value)} />
           <div className="flex justify-end gap-2">
             <Button onClick={() => setDelOpen(false)}>{t('Hủy')}</Button>
             <Button variant="danger" disabled={!delPw || busy} onClick={async () => {
               setBusy(true);
-              try { await api.del('/auth/me', { password: delPw }); await logout().catch(() => {}); router.replace('/login'); }
+              try { await api.del('/auth/me', user?.hasPassword ? { password: delPw } : { email: delPw }); await logout().catch(() => {}); router.replace('/login'); }
               catch (e: any) { toast(e.message, 'error'); } finally { setBusy(false); }
             }}>{t('Xóa vĩnh viễn')}</Button>
           </div>

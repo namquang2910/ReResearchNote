@@ -6,18 +6,21 @@ import { useQueryClient } from '@tanstack/react-query';
 import { FlaskConical, Menu, X } from 'lucide-react';
 import { AUTH_EXPIRED } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
+import { t } from '@/lib/i18n';
 import Sidebar, { SidebarContent } from './Sidebar';
 import { Spinner } from './ui';
 
-const PUBLIC_PATHS = ['/login'];
+const PUBLIC_PATHS = ['/login', '/reset-password', '/verify-email'];
 
 /** Khung ứng dụng: chặn người chưa đăng nhập, sidebar cố định (desktop) hoặc ngăn kéo (di động). */
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, config } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const qc = useQueryClient();
   const [drawer, setDrawer] = useState(false);
+  const [sent, setSent] = useState(false);
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   // đóng ngăn kéo khi đổi trang
@@ -61,7 +64,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <Sidebar />
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {config?.mail && !user.emailVerified && (
+          <div role="status" className="flex flex-none flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-amber-500/15 px-4 py-2 text-sm text-amber-700 dark:text-amber-300">
+            <span>{sent ? t('Đã gửi email xác minh. Hãy kiểm tra hộp thư.') : t('Email của bạn chưa được xác minh.')}</span>
+            {!sent && (
+              <button className="font-semibold underline" onClick={async () => { try { await api.post('/auth/send-verification'); } catch {} setSent(true); }}>
+                {t('Gửi lại email xác minh')}
+              </button>
+            )}
+          </div>
+        )}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</main>
+      </div>
     </div>
   );
 }
